@@ -8,6 +8,7 @@
     body {
       margin: 0;
       overflow: hidden;
+      background-color: black; /* Set the background color to black */
     }
   </style>
 </head>
@@ -16,18 +17,33 @@
 <script>
   // Create a scene
   const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x141414); // Set the scene background color to black
 
   // Create a camera
-  const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+  const camera = new THREE.PerspectiveCamera(85, window.innerWidth / window.innerHeight, 0.1, 1000);
   camera.position.z = 5;
 
-  // Create a renderer
-  const renderer = new THREE.WebGLRenderer();
+  // Create a renderer with lights enabled
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.physicallyCorrectLights = true;
+  renderer.gammaOutput = true;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   document.body.appendChild(renderer.domElement);
 
+  // Add ambient light to the scene
+  const ambientLight = new THREE.AmbientLight(0xffffff, 10); // Soft white light
+  scene.add(ambientLight);
+
+  // Add directional light to the scene
+  const directionalLight = new THREE.DirectionalLight(0xffffff, 10); // White light, 50% intensity
+  directionalLight.position.set(0, 10, 0); // Set light direction
+  scene.add(directionalLight);
+
   // Create a cube geometry
-  const geometry = new THREE.BoxGeometry(3, 3, 3);
+  const geometry = new THREE.BoxGeometry(3, 7, 3);
+  const surface = new THREE.BoxGeometry(3.01, 3.01, 3.01);
 
   // Create an array of video elements
   const videoSources = [
@@ -40,33 +56,38 @@
   ];
 
   // Create an array of video textures
-  const videoTextures = videoSources.map(source => {
-    if (source === null) {
-      return null;
+  const materials = videoSources.map((source, index) => {
+    let texture = null;
+    if (source !== null) {
+      const video = document.createElement('video');
+      video.src = source;
+      video.crossOrigin = 'anonymous'; // If video source is from a different origin
+      video.loop = true;
+      video.muted = true; // Ensure that the video is muted to play in browsers
+      video.play();
+      texture = new THREE.VideoTexture(video);
+      texture.minFilter = THREE.LinearFilter; // Set minification filter to LinearFilter for smoother appearance
     }
-    const video = document.createElement('video');
-    video.src = source;
-    video.crossOrigin = 'anonymous'; // If video source is from a different origin
-    video.loop = true;
-    video.muted = true; // Ensure that the video is muted to play in browsers
-    video.play();
-    const texture = new THREE.VideoTexture(video);
-    texture.minFilter = THREE.LinearFilter; // Set minification filter to LinearFilter for smoother appearance
-    return texture;
-  });
-
-  // Create an array of materials with video textures
-  const materials = videoTextures.map((texture, index) => {
     if (index === 2 || index === 3 || texture === null) {
       // No video texture for top and bottom faces, or if texture is null
-      return new THREE.MeshBasicMaterial({ color: 0xffffff }); // Use white color for these faces
+      return new THREE.MeshStandardMaterial({ color: 0xffffff }); // Use white color for these faces
     }
-    return new THREE.MeshBasicMaterial({ map: texture });
+    return new THREE.MeshStandardMaterial({ map: texture, metalness: 0.5, roughness: 0.5 });
   });
 
+  // Create a black reflective material for the surface mesh
+  const surfaceMaterial = new THREE.MeshStandardMaterial({ color: 0x000000, metalness: 1, roughness: 0 });
+
   // Create a mesh with the cube geometry and materials
-  const cube = new THREE.Mesh(geometry, materials);
+  const cube = new THREE.Mesh(geometry, surfaceMaterial);
   scene.add(cube);
+
+  // Create a mesh with the surface geometry and black reflective material
+  const surfaceMesh = new THREE.Mesh(surface, materials);
+  scene.add(surfaceMesh);
+
+  cube.position.set(0, 0, 0);
+  surfaceMesh.position.set(0, 0, 0);
 
   // Add event listeners for mouse movement
   let isDragging = false;
@@ -89,6 +110,7 @@
             ));
 
     cube.quaternion.multiplyQuaternions(deltaRotationQuaternion, cube.quaternion);
+    surfaceMesh.quaternion.multiplyQuaternions(deltaRotationQuaternion, surfaceMesh.quaternion);
 
     previousMousePosition = { x: event.clientX, y: event.clientY };
   }
